@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Galinha Pula</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#8dd9ff}
+body{touch-action:none}
+#game{position:relative;width:100vw;height:100dvh;overflow:hidden;background:linear-gradient(#8dd9ff 0%,#e7f8ff 78%)}
+#sun{position:absolute;top:7vh;left:7vw;font-size:12vw}
+#cloud{position:absolute;top:13vh;right:8vw;font-size:10vw}
+#score{position:absolute;top:max(22px,env(safe-area-inset-top));left:0;right:0;text-align:center;font-size:26px;font-weight:800;z-index:10}
+#ground{position:absolute;left:0;right:0;bottom:0;height:22%;background:#75c85a;border-top:8px solid #4e9e43}
+#player{position:absolute;left:18%;bottom:22%;width:11%;aspect-ratio:1/1.43;font-size:min(15vw,95px);line-height:1;z-index:5;filter:drop-shadow(2px 3px 1px #0002)}
+.obstacle{position:absolute;bottom:22%;border-radius:8px;background:#9b623c;border:3px solid #704127;display:flex;align-items:center;justify-content:center;z-index:4}
+.obstacle span{font-size:clamp(18px,5vw,36px)}
+#hint{position:absolute;bottom:max(12px,env(safe-area-inset-bottom));left:0;right:0;text-align:center;color:#0008;font-size:14px;z-index:9}
+#overlay{position:absolute;inset:0;background:#0003;display:flex;align-items:center;justify-content:center;z-index:20;padding:24px}
+.card{background:white;border-radius:24px;padding:28px;text-align:center;max-width:380px;width:100%;box-shadow:0 12px 40px #0003}
+.card h1{margin:0 0 8px;font-size:30px}
+.card p{margin:0 0 20px;color:#555}
+button{border:0;border-radius:14px;background:#f28c28;color:white;font-weight:800;font-size:18px;padding:14px 24px;cursor:pointer}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="sun">☀️</div>
+  <div id="cloud">☁️</div>
+  <div id="score">Pontos: 0</div>
+  <div id="ground"></div>
+  <div id="player">🐔</div>
+  <div id="hint">Toque na tela para pular • Evite os bloquinhos</div>
+
+  <div id="overlay">
+    <div class="card">
+      <h1 id="title">🐔 Galinha Pula</h1>
+      <p id="subtitle">Um jogo demonstrativo que roda direto no Safari.</p>
+      <button id="start">Jogar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const game=document.getElementById("game");
+const player=document.getElementById("player");
+const scoreEl=document.getElementById("score");
+const overlay=document.getElementById("overlay");
+const title=document.getElementById("title");
+const subtitle=document.getElementById("subtitle");
+const startBtn=document.getElementById("start");
+
+let playing=false, gameOver=false, score=0, speed=5;
+let y=0, vy=0, last=0, raf=0, obstacles=[];
+
+const gravity=22, jump=-9.5;
+const playerX=.18, playerW=.105, playerH=.15;
+
+function reset(){
+  obstacles.forEach(o=>o.el.remove());
+  obstacles=[];
+  score=0; speed=5; y=0; vy=0; gameOver=false; playing=true;
+  overlay.classList.add("hidden");
+  addObstacle(1.05,.13,.13);
+  addObstacle(1.65,.10,.19);
+  last=performance.now();
+  cancelAnimationFrame(raf);
+  raf=requestAnimationFrame(loop);
+}
+
+function addObstacle(x,w,h){
+  const el=document.createElement("div");
+  el.className="obstacle";
+  el.innerHTML="<span>🌱</span>";
+  game.appendChild(el);
+  const o={x,w,h,el,counted:false};
+  obstacles.push(o);
+  renderObstacle(o);
+}
+
+function renderObstacle(o){
+  o.el.style.left=(o.x*100)+"vw";
+  o.el.style.width=(o.w*100)+"vw";
+  o.el.style.height=(o.h*100)+"vh";
+}
+
+function jump(){
+  if(!playing){reset();return}
+  if(gameOver){reset();return}
+  if(y>=-0.005) vy=jump;
+}
+
+function collide(a,b){
+  const px1=playerX, px2=playerX+playerW;
+  const py1=y, py2=y+playerH;
+  const ox1=b.x, ox2=b.x+b.w;
+  const oy1=1-b.h, oy2=1;
+  return px1<ox2 && px2>ox1 && py1+.98>oy1 && py1+.98<oy2+.02;
+}
+
+function endGame(){
+  gameOver=true; playing=false;
+  title.textContent="Game Over!";
+  subtitle.textContent=`Você fez ${score} ponto${score===1?"":"s"}.`;
+  startBtn.textContent="Jogar novamente";
+  overlay.classList.remove("hidden");
+}
+
+function loop(now){
+  if(!playing)return;
+  const dt=Math.min((now-last)/1000,.04); last=now;
+
+  vy+=gravity*dt; y+=vy*dt;
+  if(y>0){y=0;vy=0}
+
+  for(const o of obstacles){o.x-=speed*dt*.12;renderObstacle(o)}
+  obstacles=obstacles.filter(o=>{
+    if(o.x<-.2){o.el.remove();return false}
+    return true;
+  });
+
+  if(obstacles.length===0 || obstacles[obstacles.length-1].x<.75){
+    const h=.10+Math.random()*.12, w=.09+Math.random()*.07;
+    addObstacle(1.02+Math.random()*.18,w,h);
+  }
+
+  for(const o of obstacles){
+    if(!o.counted && o.x+o.w<playerX){
+      o.counted=true;score++;
+      if(score%5===0)speed+=.45;
+    }
+    if(collide(null,o)){endGame();return}
+  }
+
+  player.style.bottom=`calc(22% + ${-y*100}vh)`;
+  scoreEl.textContent="Pontos: "+score;
+  raf=requestAnimationFrame(loop);
+}
+
+function handle(e){e.preventDefault();jump()}
+game.addEventListener("pointerdown",handle,{passive:false});
+startBtn.addEventListener("click",e=>{e.stopPropagation();reset()});
+</script>
+</body>
+</html>
